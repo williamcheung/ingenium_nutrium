@@ -7,6 +7,8 @@ import os
 from langchain.schema import AIMessage, HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 
+from nutrients_service import get_nutrient_data
+
 llm = ChatOpenAI(temperature=1.0, model=os.getenv('OPENAI_MODEL'))
 
 def ask_ai_for_recipe(message: str, history: list[tuple[str, str]]) -> str:
@@ -47,6 +49,31 @@ If the input is NOT a recipe or you can't extract any ingredients, respond with 
     print(f'{recipe_ingredients=}')
     return recipe_ingredients
 
+def ask_ai_to_format_nutrients(nutrients_by_ingredient: list[dict[str, list[dict[str, str | int | float]]]]):
+    gpt_response = llm.invoke([HumanMessage(content=
+f'''
+Format the Python list of dicts below for a non-technical user who wants to know the nutrient values of ingredients ("foods") in a recipe.
+Each dict in the list has key 'food' (str) and value set to a list of other dictionaries, each representing a nutrient with the following keys:
+- 'nutrientName' (str)
+- 'value' (int or float)
+- 'unitName' (str)
+
+Format your response in Markdown to make it easy for the user to read the nutrients for each food in the recipe they're interested in.
+Do not re-order the nutrients, they are already sorted by weight.
+Use user-friendly labels but keep the same unit names for weight, which are in Metric.
+
+Your response will be shown directly to the user, so DO NOT begin your response with anything like "Here is a formatted list..." that is meant for me.
+I am not going to review your response at all, I will show it directly to the user!
+You can start with a title like "Nutrient Values of Ingredients in the Recipe" that will make sense to the user.
+
+<nutrients_by_ingredient>
+{nutrients_by_ingredient}
+</nutrients_by_ingredient>
+'''.strip()
+    )])
+    return gpt_response.content
+
+# send_button click handler
 def submit_message(message: str, history: list[tuple[str, str]]) -> tuple[list[str], list[tuple[str, str]], str]:
     response: str = ask_ai_for_recipe(message, history)
     history.append((message, response))
@@ -55,26 +82,40 @@ def submit_message(message: str, history: list[tuple[str, str]]) -> tuple[list[s
 
     return latest_ingredients, history, '' # '' clears the input text box
 
+# retry_button click handler
 def retry_message(history: list[tuple[str, str]]) -> tuple[list[str], list[tuple[str, str]], str]:
     if history:
         last_message: str = history[-1][0]
         return submit_message(last_message, history[:-1])
     return [], history, ''
 
+# undo_message click handler
 def undo_message(history: list[tuple[str, str]]) -> tuple[list[str], list[tuple[str, str]], str]:
     if history:
         return [], history[:-1], ''
     return [], history, ''
 
+# clear_button click handler
 def clear_messages() -> tuple[list[str], list[tuple[str, str]], str]:
     return [], [], ''
 
+# nutrients_button click handler
 def get_nutrients(history: list[tuple[str, str]], latest_ingredients: list[str]) -> tuple[list[str], list[tuple[str, str]]]:
-    ingredients = [i for i in latest_ingredients if i.strip()]
+    ingredients = [ingredient for ingredient in latest_ingredients if ingredient.strip()]
     if not ingredients:
         return [], history
 
-    history.append((None, ', '.join(latest_ingredients)))
+    nutrients_by_ingredient = []
+    for ingredient in ingredients:
+        print(f'\ngetting nutrients from USDA for [{ingredient}]...')
+        nutrients = get_nutrient_data(ingredient)
+        if nutrients:
+            nutrients_by_ingredient.append(nutrients)
+
+    if nutrients_by_ingredient:
+        formatted_nutrients = ask_ai_to_format_nutrients(nutrients_by_ingredient)
+        history.append((None, formatted_nutrients))
+
     return [], history
 
 with gr.Blocks() as demo:
