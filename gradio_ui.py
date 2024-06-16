@@ -69,6 +69,14 @@ def undo_message(history: list[tuple[str, str]]) -> tuple[list[str], list[tuple[
 def clear_messages() -> tuple[list[str], list[tuple[str, str]], str]:
     return [], [], ''
 
+def get_nutrients(history: list[tuple[str, str]], latest_ingredients: list[str]) -> tuple[list[str], list[tuple[str, str]]]:
+    ingredients = [i for i in latest_ingredients if i.strip()]
+    if not ingredients:
+        return [], history
+
+    history.append((None, ', '.join(latest_ingredients)))
+    return [], history
+
 with gr.Blocks() as demo:
     latest_ingredients_var = gr.State([])
 
@@ -103,5 +111,7 @@ plus I'll even give you the nutritional value of your meal :)
     retry_button.click(retry_message, inputs=[chatbot], outputs=[latest_ingredients_var, chatbot, msg])
     undo_button.click(undo_message, inputs=[chatbot], outputs=[latest_ingredients_var, chatbot, msg])
     clear_button.click(clear_messages, outputs=[latest_ingredients_var, chatbot, msg])
+
+    nutrients_button.click(get_nutrients, inputs=[chatbot, latest_ingredients_var], outputs=[latest_ingredients_var, chatbot])
 
 demo.launch(server_name='0.0.0.0')
