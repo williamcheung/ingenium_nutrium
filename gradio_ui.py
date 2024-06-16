@@ -4,19 +4,24 @@ load_dotenv()
 import gradio as gr
 import os
 
-from langchain.schema import AIMessage, HumanMessage
+from langchain.schema import AIMessage, HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 
 llm = ChatOpenAI(temperature=1.0, model=os.getenv('OPENAI_MODEL'))
 
 def ask_ai(message: str, history: list[tuple[str, str]]) -> str:
-    history_langchain_format: list[HumanMessage|AIMessage] = []
+    history_langchain_format: list[HumanMessage|AIMessage] = [
+        SystemMessage(
+            content="You are a friendly and creative chef. But you only answer questions about recipes, nothing else!"
+        )
+    ]
 
     for human, ai in history:
         if human:
             history_langchain_format.append(HumanMessage(content=human))
         history_langchain_format.append(AIMessage(content=ai))
 
+    print(f'user: {message}')
     history_langchain_format.append(HumanMessage(content=message))
 
     gpt_response = llm.invoke(history_langchain_format)
